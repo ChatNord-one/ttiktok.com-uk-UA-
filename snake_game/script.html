@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Змійка на JS 🐍</title>
+<style>
+    body {
+        margin: 0;
+        background: black;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        color: white;
+        font-family: Arial, sans-serif;
+    }
+    #gameCanvas {
+        background: #111;
+    }
+    #info {
+        position: absolute;
+        top: 5px;
+        left: 5px;
+        font-size: 18px;
+    }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="info"></div>
+
+<script>
+// --- Налаштування гри ---
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const infoDiv = document.getElementById("info");
+
+const CELL_SIZE = 25;
+const WIDTH = 600;
+const HEIGHT = 400;
+canvas.width = WIDTH;
+canvas.height = HEIGHT;
+
+const COLS = WIDTH / CELL_SIZE;
+const ROWS = HEIGHT / CELL_SIZE;
+
+let snake = [{x:5,y:5}];
+let direction = "RIGHT";
+let nextDirection = "RIGHT";
+let food = {x:10,y:10};
+let bonus = null;
+let score = 0;
+let paused = false;
+
+let roles = {
+    player: {color: "green", wrap:false, ignoreSelf:false},
+    vip: {color:"yellow", wrap:false, ignoreSelf:true},
+    admin: {color:["blue","cyan"], wrap:true, ignoreSelf:true, teleport:true}
+};
+let currentRole = "player";
+
+// --- Малювання ---
+function drawGrid() {
+    ctx.strokeStyle = "#222";
+    for(let x=0;x<COLS;x++){
+        for(let y=0;y<ROWS;y++){
+            ctx.strokeRect(x*CELL_SIZE, y*CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        }
+    }
+}
+
+function drawSnake() {
+    snake.forEach((seg, i)=>{
+        let color;
+        if(i==0) color="orange";
+        else{
+            color=roles[currentRole].color;
+            if(Array.isArray(color)) color=color[i%color.length];
+        }
+        ctx.fillStyle=color;
+        ctx.fillRect(seg.x*CELL_SIZE, seg.y*CELL_SIZE, CELL_SIZE, CELL_SIZE);
+    });
+}
+
+function drawFood() {
+    ctx.fillStyle = "red";
+    ctx.beginPath();
+    ctx.arc(food.x*CELL_SIZE+CELL_SIZE/2, food.y*CELL_SIZE+CELL_SIZE/2, CELL_SIZE/2,0,Math.PI*2);
+    ctx.fill();
+}
+
+function drawBonus() {
+    if(bonus){
+        ctx.fillStyle = "blue";
+        ctx.fillRect(bonus.x*CELL_SIZE, bonus.y*CELL_SIZE, CELL_SIZE, CELL_SIZE);
+    }
+}
+
+function drawInfo() {
+    infoDiv.textContent = `Роль: ${currentRole.toUpperCase()} | Очки: ${score}`;
+}
+
+// --- Рух змійки ---
+function moveSnake() {
+    let head = {...snake[0]};
+
+    if(nextDirection=="UP" && direction!="DOWN") direction="UP";
+    if(nextDirection=="DOWN" && direction!="UP") direction="DOWN";
+    if(nextDirection=="LEFT" && direction!="RIGHT") direction="LEFT";
+    if(nextDirection=="RIGHT" && direction!="LEFT") direction="RIGHT";
+
+    if(direction=="UP") head.y--;
+    if(direction=="DOWN") head.y++;
+    if(direction=="LEFT") head.x--;
+    if(direction=="RIGHT") head.x++;
+
+    if(roles[currentRole].wrap){
+        head.x = (head.x+COLS)%COLS;
+        head.y = (head.y+ROWS)%ROWS;
+    } else {
+        if(head.x<0||head.y<0||head.x>=COLS||head.y>=ROWS){
+            gameOver();
+            return;
+        }
+    }
+
+    if(!roles[currentRole].ignoreSelf && snake.some(s=>s.x==head.x && s.y==head.y)){
+        gameOver();
+        return;
+    }
+
+    snake.unshift(head);
+
+    if(head.x==food.x && head.y==food.y){
+        score++;
+        spawnFood();
+    } else snake.pop();
+
+    if(bonus && head.x==bonus.x && head.y==bonus.y){
+        score+=2;
+        bonus=null;
+    }
+
+    if(score>=10 && currentRole=="player") currentRole="vip";
+    if(score>=25 && currentRole=="vip") currentRole="admin";
+}
+
+// --- Спавн їжі та бонусу ---
+function spawnFood(){
+    while(true){
+        let x=Math.floor(Math.random()*COLS);
+        let y=Math.floor(Math.random()*ROWS);
+        if(!snake.some(s=>s.x==x && s.y==y) && (!bonus || bonus.x!=x || bonus.y!=y)){
+            food={x,y};
+            break;
+        }
+    }
+}
+
+function spawnBonus(){
+    if(!bonus && Math.random()<0.03){
+        while(true){
+            let x=Math.floor(Math.random()*COLS);
+            let y=Math.floor(Math.random()*ROWS);
+            if(!snake.some(s=>s.x==x && s.y!=food.y && x!=food.x)){
+                bonus={x,y};
+                break;
+            }
+        }
+    }
+}
+
+// --- Кінець гри ---
+function gameOver(){
+    alert(`💀 Кінець гри! Очки: ${score}`);
+    snake=[{x:5,y:5}];
+    score=0;
+    currentRole="player";
+    direction="RIGHT";
+    nextDirection="RIGHT";
+    food={x:10,y:10};
+    bonus=null;
+}
+
+// --- Керування ---
+document.addEventListener("keydown", e=>{
+    if(e.key=="ArrowUp") nextDirection="UP";
+    if(e.key=="ArrowDown") nextDirection="DOWN";
+    if(e.key=="ArrowLeft") nextDirection="LEFT";
+    if(e.key=="ArrowRight") nextDirection="RIGHT";
+    if(e.key=="Escape") paused=!paused;
+    if(e.key=="l") adminLogin();
+});
+
+// --- Логін для admin ---
+function adminLogin(){
+    let password = prompt("🔑 Введи пароль:");
+    if(password=="admin123") currentRole="admin";
+}
+
+// --- Основний цикл ---
+let gameSpeed = 120;
+function gameLoop(){
+    if(!paused) moveSnake();
+
+    ctx.fillStyle="black";
+    ctx.fillRect(0,0,WIDTH,HEIGHT);
+
+    drawGrid();
+    drawFood();
+    drawBonus();
+    drawSnake();
+    drawInfo();
+    spawnBonus();
+}
+
+setInterval(gameLoop, gameSpeed);
+</script>
+</body>
+</html>
